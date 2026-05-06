@@ -1,0 +1,13 @@
+{
+  "name": "aws-assignment-app",
+  "version": "1.0.0",
+  "description": "AWS Assignment App",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "mysql2": "^3.6.0"
+  }
+}
