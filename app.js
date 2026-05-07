@@ -1,83 +1,94 @@
 const express = require('express');
-const mysql = require('mysql2');
+const sql = require('mssql');
 
 const app = express();
 app.use(express.json());
 
-// 🔐 DB Config (keep same for now)
-const db = mysql.createConnection({
-  host: "database-1.cluster-crysswk8kh05.ap-south-1.rds.amazonaws.com",
-  user: "admin",
-  password: "password", // make sure this is correct
-  database: "testdb"
-});
-
-// ✅ Connect to DB
-db.connect((err) => {
-  if (err) {
-    console.error("❌ DB connection failed:", err.message);
-  } else {
-    console.log("✅ Connected to RDS");
+// ✅ SQL Server Config
+const config = {
+  user: 'admin',
+  password: 'Password123',
+  server: 'database-1.crysswk8kh05.ap-south-1.rds.amazonaws.com', // remove "cluster"
+  database: 'master',
+  port: 1433,
+  options: {
+    encrypt: true,
+    trustServerCertificate: true
   }
-});
+};
+
+// ✅ Connect to SQL Server
+sql.connect(config)
+  .then(() => {
+    console.log('✅ Connected to RDS SQL Server');
+  })
+  .catch(err => {
+    console.error('❌ DB connection failed:', err);
+  });
 
 // 🏠 Home route
 app.get('/', (req, res) => {
-  res.send("AWS Assignment App Running 🚀");
+  res.send('AWS Assignment App Running 🚀');
 });
 
-// ❤️ Health check (important for AWS)
+// ❤️ Health check
 app.get('/health', (req, res) => {
-  res.send("OK");
+  res.send('OK');
 });
 
 // 🗄️ Create table
-app.get('/init', (req, res) => {
-  const query = `
-    CREATE TABLE IF NOT EXISTS users (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      name VARCHAR(255)
-    )
-  `;
+app.get('/init', async (req, res) => {
+  try {
+    await sql.query(`
+      IF NOT EXISTS (
+        SELECT * FROM sysobjects WHERE name='users' AND xtype='U'
+      )
+      CREATE TABLE users (
+        id INT PRIMARY KEY IDENTITY(1,1),
+        name NVARCHAR(255)
+      )
+    `);
 
-  db.query(query, (err) => {
-    if (err) {
-      console.error("❌ Table creation error:", err.message);
-      return res.status(500).send("Error creating table: " + err.message);
-    }
-    res.send("✅ Table Created Successfully");
-  });
+    res.send('✅ Table Created Successfully');
+  } catch (err) {
+    console.error('❌ Table creation error:', err);
+    res.status(500).send(err.message);
+  }
 });
 
 // ➕ Insert user
-app.post('/add', (req, res) => {
-  const { name } = req.body;
+app.post('/add', async (req, res) => {
+  try {
+    const { name } = req.body;
 
-  if (!name) {
-    return res.status(400).send("Name is required");
-  }
-
-  db.query("INSERT INTO users (name) VALUES (?)", [name], (err) => {
-    if (err) {
-      console.error("❌ Insert error:", err.message);
-      return res.status(500).send("Insert failed: " + err.message);
+    if (!name) {
+      return res.status(400).send('Name is required');
     }
-    res.send("✅ User added");
-  });
+
+    await sql.query`
+      INSERT INTO users (name)
+      VALUES (${name})
+    `;
+
+    res.send('✅ User added');
+  } catch (err) {
+    console.error('❌ Insert error:', err);
+    res.status(500).send(err.message);
+  }
 });
 
 // 📄 Fetch users
-app.get('/users', (req, res) => {
-  db.query("SELECT * FROM users", (err, result) => {
-    if (err) {
-      console.error("❌ Fetch error:", err.message);
-      return res.status(500).send("Fetch failed: " + err.message);
-    }
-    res.json(result);
-  });
+app.get('/users', async (req, res) => {
+  try {
+    const result = await sql.query('SELECT * FROM users');
+    res.json(result.recordset);
+  } catch (err) {
+    console.error('❌ Fetch error:', err);
+    res.status(500).send(err.message);
+  }
 });
 
-// 🚀 Start server (AWS compatible)
+// 🚀 Start server
 const PORT = process.env.PORT || 8080;
 
 app.listen(PORT, () => {
