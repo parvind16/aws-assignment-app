@@ -1,30 +1,53 @@
 const express = require('express');
 const sql = require('mssql');
 
+const {
+SecretsManagerClient,
+GetSecretValueCommand
+} = require('@aws-sdk/client-secrets-manager');
+
 const app = express();
 app.use(express.json());
 
-// ✅ SQL Server Config
+// ✅ AWS Secrets Manager
+async function getDBConfig() {
+const client = new SecretsManagerClient({
+region: process.env.AWS_REGION || 'ap-south-1'
+});
+
+const response = await client.send(
+new GetSecretValueCommand({
+SecretId: process.env.SECRET_NAME || 'myapp/rds'
+})
+);
+
+return JSON.parse(response.SecretString);
+}
+
+// ✅ Start App
+async function startServer() {
+try {
+// Get secret from AWS Secrets Manager
+const secret = await getDBConfig();
+
+
+// SQL Server Config
 const config = {
-  user: 'admin',
-  password: 'Password123',
-  server: 'database-1.crysswk8kh05.ap-south-1.rds.amazonaws.com', // remove "cluster"
-  database: 'master',
-  port: 1433,
+  user: secret.username,
+  password: secret.password,
+  server: secret.host,
+  database: secret.database,
+  port: parseInt(secret.port),
   options: {
     encrypt: true,
     trustServerCertificate: true
   }
 };
 
-// ✅ Connect to SQL Server
-sql.connect(config)
-  .then(() => {
-    console.log('✅ Connected to RDS SQL Server');
-  })
-  .catch(err => {
-    console.error('❌ DB connection failed:', err);
-  });
+// Connect to SQL Server
+await sql.connect(config);
+
+console.log('✅ Connected to RDS SQL Server');
 
 // 🏠 Home route
 app.get('/', (req, res) => {
@@ -94,3 +117,11 @@ const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
+
+
+} catch (err) {
+console.error('❌ Startup error:', err);
+}
+}
+
+startServer();
